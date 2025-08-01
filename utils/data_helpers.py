@@ -3,12 +3,20 @@ from tkinter import ttk
 
 def limpiar_numero_documento(doc):
     """
-    Limpia un número de documento, eliminando '.0' si existe.
+    Limpia un número de documento, eliminando '.0' y '_x000D_' si existen.
     """
-    doc_str = str(doc)
+    doc_str = str(doc).replace('_x000D_', '').strip() # Eliminar _x000D_ primero
     if doc_str.endswith('.0'):
         return doc_str[:-2]
     return doc_str
+
+def limpiar_texto_excel(text):
+    """
+    Elimina el artefacto '_x000D_' de las cadenas de texto.
+    """
+    if pd.isna(text):
+        return ''
+    return str(text).replace('_x000D_', '').strip()
 
 def aplicar_estilo(root):
     """Aplica un estilo básico a la aplicación Tkinter."""
@@ -69,7 +77,5 @@ def aplicar_estilo(root):
                     foreground=text_color,
                     relief="flat")
     style.map('Treeview.Heading',
-              background=[('active', '#d0d0d0')])
-    style.map('Treeview',
               background=[('selected', primary_color)],
               foreground=[('selected', 'white')])

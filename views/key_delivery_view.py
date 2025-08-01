@@ -165,22 +165,41 @@ class KeyDeliveryView(BaseView):
         # Obtener los datos actuales de la tabla
         data = [(self.tree.set(child, col), child) for child in self.tree.get_children('')]
         
-        # Determinar si es un tipo numérico para ordenar correctamente
-        try:
-            data.sort(key=lambda t: float(t[0]) if isinstance(t[0], str) and t[0].replace('.', '', 1).isdigit() else t[0])
-        except ValueError:
-            data.sort(key=lambda t: t[0])
-
-        # Invertir el orden si ya estaba ordenado en esa dirección
-        if hasattr(self, '_sort_direction') and self._sort_column == col and self._sort_direction == "asc":
-            data.reverse()
-            self._sort_direction = "desc"
+        # Determinar la dirección de ordenación
+        if self._sort_column == col:
+            self._sort_direction = "desc" if self._sort_direction == "asc" else "asc"
         else:
             self._sort_direction = "asc"
-        self._sort_column = col
+            self._sort_column = col
 
+        # Función clave para la ordenación robusta
+        def sort_key_robust(item_tuple):
+            value = item_tuple[0]
+            try:
+                # Intentar convertir a float para números
+                return (0, float(value)) # 0 para que los números se ordenen antes que las cadenas
+            except (ValueError, TypeError):
+                # Si no es un número, tratar como cadena
+                return (1, str(value).lower()) # 1 para que las cadenas se ordenen después de los números
+
+        # Ordenar los datos
+        data.sort(key=sort_key_robust, reverse=(self._sort_direction == "desc"))
+
+        # Reorganizar los elementos en el Treeview
         for index, (val, item) in enumerate(data):
             self.tree.move(item, '', index)
+
+        # Actualizar el encabezado de la columna para mostrar la dirección de ordenación
+        for c in self.tree["columns"]:
+            text = self.tree.heading(c, "text")
+            if c == col:
+                arrow = " ↑" if self._sort_direction == "asc" else " ↓"
+                # Eliminar flechas anteriores antes de añadir la nueva
+                text = text.replace(" ↑", "").replace(" ↓", "")
+                self.tree.heading(c, text=f"{text}{arrow}")
+            else:
+                self.tree.heading(c, text=text.replace(" ↑", "").replace(" ↓", ""))
+
 
     def mostrar_modal_llaves_prestadas(self):
         """Muestra un modal con las llaves prestadas hoy."""

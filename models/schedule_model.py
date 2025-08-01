@@ -2,7 +2,7 @@ import pandas as pd
 from datetime import datetime
 import os
 from tkinter import messagebox # Importar messagebox para mostrar errores
-from utils.data_helpers import limpiar_numero_documento # Importar función auxiliar
+from utils.data_helpers import limpiar_numero_documento, limpiar_texto_excel # Importar funciones auxiliares
 
 class ScheduleModel:
     """
@@ -21,13 +21,21 @@ class ScheduleModel:
             try:
                 # Especificar el motor openpyxl para leer el archivo Excel
                 df = pd.read_excel(self.cleaned_schedule_path, engine='openpyxl')
+                
+                # Convertir 'nroidenti' a string y limpiar inmediatamente
+                if 'nroidenti' in df.columns:
+                    df['nroidenti'] = df['nroidenti'].astype(str).apply(limpiar_numero_documento)
+
+                # Aplicar limpieza de texto a todas las columnas de cadena (object dtype)
+                for col in df.select_dtypes(include=['object']).columns:
+                    df[col] = df[col].apply(limpiar_texto_excel)
+
                 # Asegurar que las columnas de hora sean objetos time
                 if 'horario' in df.columns: # Verificar si la columna horario existe para extraer horas
                     # Intentar dividir el horario en hora_ini y hora_fin
                     df['hora_ini'] = ''
                     df['hora_fin'] = ''
 
-                    # Intenta el formato "HH:MM A HH:MM", "HH:MM a HH:MM" o "HH:MM-HH:MM"
                     # Usar una función para aplicar la lógica de split de manera segura
                     def split_horario(horario_str):
                         if pd.isna(horario_str):
@@ -102,34 +110,33 @@ class ScheduleModel:
             return df
         
         try:
+            # Convertir 'nroidenti' a string y limpiar inmediatamente
+            if 'nroidenti' in df.columns:
+                df['nroidenti'] = df['nroidenti'].astype(str).apply(limpiar_numero_documento)
+
+            # Aplicar limpieza de texto a todas las columnas de cadena (object dtype)
+            for col in df.select_dtypes(include=['object']).columns:
+                df[col] = df[col].apply(limpiar_texto_excel)
+
             # Limpiar datos básicos
-            if 'horario' in df.columns:
-                df['horario'] = df['horario'].astype(str)
-            else:
+            if 'horario' not in df.columns:
                 df['horario'] = '' # Asegurar existencia de columna
 
-            if 'profesor' in df.columns:
-                df['profesor'] = df['profesor'].fillna('').str.strip()
-            else:
+            if 'profesor' not in df.columns:
                 df['profesor'] = ''
 
-            if 'nroidenti' in df.columns:
-                df['nroidenti'] = df['nroidenti'].apply(limpiar_numero_documento)
-            else:
-                df['nroidenti'] = ''
-
-            if 'dia' in df.columns:
-                df['dia'] = df['dia'].str.upper().str.strip()
-            else:
+            if 'dia' not in df.columns:
                 df['dia'] = ''
+            else:
+                df['dia'] = df['dia'].str.upper().str.strip()
             
             # Limpiar nombres de materias
             if 'MATERIA' in df.columns:
-                df['materia'] = df['MATERIA'].fillna('').str.strip()
-            elif 'materia' not in df.columns: # Si no existe 'MATERIA' ni 'materia'
+                df['materia'] = df['MATERIA'].fillna('').astype(str).apply(limpiar_texto_excel)
+            elif 'materia' in df.columns: # Si existe 'materia' pero no 'MATERIA'
+                df['materia'] = df['materia'].fillna('').astype(str).apply(limpiar_texto_excel)
+            else: # Si no existe 'MATERIA' ni 'materia'
                 df['materia'] = ''
-            else: # Si existe 'materia' pero no 'MATERIA'
-                df['materia'] = df['materia'].fillna('').str.strip()
 
 
             # Separar hora inicio y fin con diferentes formatos posibles
@@ -178,7 +185,8 @@ class ScheduleModel:
                     agg_dict['hora_fin'] = 'max'
                 
                 # Agregar columnas opcionales solo si existen
-                for col in ['nro_estudiantes', 'grupo', 'nivel_grupo', 'semestre', 'PROGRAMA', 'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat', 'TOTAL', 'OBSERVACION']:
+                # AÑADIDO 'inp' aquí para asegurar que se retenga
+                for col in ['nro_estudiantes', 'grupo', 'nivel_grupo', 'semestre', 'PROGRAMA', 'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat', 'TOTAL', 'OBSERVACION', 'inp']:
                     if col in df.columns:
                         agg_dict[col] = 'first'
                 
@@ -234,8 +242,6 @@ class ScheduleModel:
         os.makedirs(os.path.dirname(self.cleaned_schedule_path), exist_ok=True)
         try:
             df_limpio.to_excel(self.cleaned_schedule_path, index=False, engine='openpyxl')
-            # No mostrar messagebox aquí para evitar spam en el inicio.
-            # messagebox.showinfo("Guardado", f"Programación limpia guardada en: {self.cleaned_schedule_path}")
         except Exception as e:
             messagebox.showerror("Error de Guardado", f"No se pudo guardar la programación limpia: {e}")
 
@@ -270,5 +276,5 @@ class ScheduleModel:
             df.to_excel(path, index=False, engine='openpyxl')
             messagebox.showinfo("Exportación Exitosa", f"Programación exportada a: {path}")
         except Exception as e:
-            messagebox.showerror("Error de Exportación", f"No se pudo exportar la programación : {e}")
+            messagebox.showerror("Error de Exportación", f"No se pudo exportar la programación: {e}")
 
