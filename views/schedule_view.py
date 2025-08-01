@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 from datetime import datetime
 from views.base_view import BaseView # Importar la clase base
-from utils.data_helpers import limpiar_numero_documento # Importar función auxiliar
+from utils.data_helpers import limpiar_numero_documento, limpiar_texto_excel # Importar función auxiliar
 
 class ScheduleView(BaseView):
     """Vista para la gestión de la programación."""
@@ -14,7 +14,9 @@ class ScheduleView(BaseView):
         self.full_schedule_df = pd.DataFrame() # DataFrame para la programación completa
         self._sort_direction = "asc" # Dirección de ordenación inicial
         self._sort_column = None # Columna actualmente ordenada
-        self.filter_entries = {} # <--- Asegurado que se inicializa aquí
+        self.filter_entries = {} # Asegurado que se inicializa aquí
+
+        # Atributos de paginación eliminados
 
         super().__init__(parent, controller, "Programación Académica")
 
@@ -32,18 +34,52 @@ class ScheduleView(BaseView):
         table_frame = ttk.Frame(self)
         table_frame.pack(pady=10, padx=10, fill="both", expand=True)
 
-        # Columnas de la tabla (todas las del archivo de programación)
+        # Columnas de la tabla (todas las del archivo de programación, ajustadas para la vista)
         columns = [
-            'semestre', 'materia', 'PROGRAMA', 'MATERIA', 'inp', 'grupo', 'nivel_grupo',
+            'semestre', 'codigo_materia', 'PROGRAMA', 'materia', 'inp', 'grupo', 'nivel_grupo',
             'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat',
             'nro_estudiantes', 'TOTAL', 'nroidenti', 'profesor', 'dia', 'horario', 'aula', 'OBSERVACION'
         ]
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
         self.tree.pack(side="left", fill="both", expand=True)
 
+        # Configurar encabezados y ancho de columnas
+        column_display_names = {
+            'semestre': 'Semestre',
+            'codigo_materia': 'Cód. Materia', # Nuevo nombre para el código
+            'PROGRAMA': 'Programa',
+            'materia': 'Materia', # Nombre descriptivo de la materia
+            'inp': 'Inp',
+            'grupo': 'Grupo',
+            'nivel_grupo': 'Nivel Grupo',
+            'semanas': 'Semanas',
+            'nro_horas': 'Nro. Horas',
+            'fecha_inicio': 'Fecha Inicio',
+            'fecha_fin': 'Fecha Fin',
+            'nro_estudiantes_premat': 'Est. Premat.',
+            'nro_estudiantes': 'Estudiantes',
+            'TOTAL': 'Total',
+            'nroidenti': 'Nro. Identificación',
+            'profesor': 'Profesor',
+            'dia': 'Día',
+            'horario': 'Horario',
+            'aula': 'Aula',
+            'OBSERVACION': 'Observación'
+        }
+
         for col in columns:
-            self.tree.heading(col, text=col.replace("_", " ").title(), command=lambda c=col: self.ordenar_columna(c))
+            self.tree.heading(col, text=column_display_names.get(col, col.replace("_", " ").title()), command=lambda c=col: self.ordenar_columna(c))
             self.tree.column(col, width=100) # Ancho por defecto
+
+        # Ajustes de ancho para algunas columnas importantes
+        self.tree.column('profesor', width=150)
+        self.tree.column('materia', width=200)
+        self.tree.column('codigo_materia', width=100)
+        self.tree.column('horario', width=120)
+        self.tree.column('nroidenti', width=120)
+        self.tree.column('aula', width=80)
+        self.tree.column('PROGRAMA', width=200)
+
 
         scrollbar_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         scrollbar_y.pack(side="right", fill="y")
@@ -61,9 +97,10 @@ class ScheduleView(BaseView):
         
         # Crear los campos de filtro dinámicamente
         # Usar un subconjunto de columnas para los filtros visibles para no saturar la UI
-        filterable_columns = ['profesor', 'materia', 'aula', 'dia', 'horario', 'grupo', 'nroidenti']
+        # Asegurarse de incluir 'codigo_materia' y 'materia' (descriptiva)
+        filterable_columns = ['profesor', 'materia', 'codigo_materia', 'aula', 'dia', 'horario', 'grupo', 'nroidenti', 'PROGRAMA']
         for i, col in enumerate(filterable_columns):
-            tk.Label(filter_frame, text=col.replace("_", " ").title()).pack(side=tk.LEFT, padx=2)
+            tk.Label(filter_frame, text=column_display_names.get(col, col.replace("_", " ").title())).pack(side=tk.LEFT, padx=2)
             entry = ttk.Entry(filter_frame, width=10)
             entry.pack(side=tk.LEFT, padx=2)
             entry.bind("<KeyRelease>", self.aplicar_filtros_columna)
@@ -71,29 +108,38 @@ class ScheduleView(BaseView):
 
         ttk.Button(filter_frame, text="Limpiar Filtros", command=self.limpiar_filtros).pack(side=tk.LEFT, padx=10)
 
+        # Marco de paginación eliminado
+
+
     def cargar_datos_vista(self):
         """Carga y muestra la programación limpia completa."""
         self.full_schedule_df = self.controller.obtener_programacion_completa()
+        # No se reinicia la página actual ya que la paginación ha sido eliminada
         self.actualizar_tabla(self.full_schedule_df)
 
     def actualizar_tabla(self, df):
-        """Actualiza la tabla con los datos del DataFrame."""
+        """Actualiza la tabla con los datos del DataFrame, sin paginación."""
         for item in self.tree.get_children():
             self.tree.delete(item)
         
         if df.empty:
+            # No hay necesidad de total_pages o current_page
             return
 
+        # No hay cálculo de paginación, se muestra todo el DataFrame
+        display_df = df 
+
         # Asegurarse de que todas las columnas esperadas existan en el DataFrame antes de insertarlas
-        expected_columns = [
-            'semestre', 'materia', 'PROGRAMA', 'MATERIA', 'inp', 'grupo', 'nivel_grupo',
+        # y usar los nombres de columna del DataFrame (que ya hemos mapeado en el modelo)
+        expected_columns_from_df = [
+            'semestre', 'codigo_materia', 'PROGRAMA', 'materia', 'inp', 'grupo', 'nivel_grupo',
             'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat',
             'nro_estudiantes', 'TOTAL', 'nroidenti', 'profesor', 'dia', 'horario', 'aula', 'OBSERVACION'
         ]
         
-        for index, row in df.iterrows():
+        for index, row in display_df.iterrows(): # Usar display_df (que es el df completo o filtrado)
             values = []
-            for col in expected_columns:
+            for col in expected_columns_from_df:
                 value = row.get(col, '') # Usar .get() con un valor por defecto si la columna no existe
                 if 'fecha' in col and pd.notna(value):
                     values.append(value.strftime('%Y-%m-%d'))
@@ -102,6 +148,9 @@ class ScheduleView(BaseView):
                 else:
                     values.append(value)
             self.tree.insert("", "end", values=values)
+
+    # Métodos de paginación eliminados: set_items_per_page, go_to_previous_page, go_to_next_page
+
 
     def cargar_y_limpiar_programacion(self):
         """Permite al usuario seleccionar un archivo Excel, lo carga, limpia y guarda."""
@@ -115,6 +164,7 @@ class ScheduleView(BaseView):
                 messagebox.showinfo("Cargando", "Cargando y limpiando programación. Esto puede tardar un momento...")
                 cleaned_df = self.controller.cargar_y_limpiar_programacion(file_path)
                 self.full_schedule_df = cleaned_df
+                # No se reinicia la página actual ya que la paginación ha sido eliminada
                 self.actualizar_tabla(cleaned_df)
                 messagebox.showinfo("Éxito", "Programación cargada y limpia correctamente.")
             except Exception as e:
@@ -147,39 +197,74 @@ class ScheduleView(BaseView):
                         filtered_df = filtered_df[filtered_df['nroidenti_limpio'].str.contains(limpiar_numero_documento(filter_val), case=False, na=False)]
                         filtered_df = filtered_df.drop(columns=['nroidenti_limpio'])
                     else:
-                        filtered_df = filtered_df[filtered_df[col].astype(str).str.contains(filter_val, case=False, na=False)]
+                        filtered_df = filtered_df[filtered_df[col].astype(str).str.contains(limpiar_texto_excel(filter_val), case=False, na=False)]
+        
+        # Después de filtrar, actualizar la tabla directamente con el DataFrame filtrado
         self.actualizar_tabla(filtered_df)
+
 
     def limpiar_filtros(self):
         """Limpia todos los filtros y recarga la tabla."""
         for entry in self.filter_entries.values(): # Usar self.filter_entries
             entry.delete(0, tk.END)
-        self.cargar_datos_vista()
+        # Resetear a los datos originales completos y actualizar la tabla
+        self.actualizar_tabla(self.full_schedule_df)
 
     def ordenar_columna(self, col):
         """Ordena la tabla por la columna especificada."""
-        # Obtener los datos actuales de la tabla
-        data = [(self.tree.set(child, col), child) for child in self.tree.get_children('')]
-        
-        # Determinar si es un tipo numérico o fecha para ordenar correctamente
-        try:
-            if 'fecha' in col:
-                data.sort(key=lambda t: datetime.strptime(t[0], '%Y-%m-%d') if t[0] else datetime.min)
-            elif 'nroidenti' in col or 'nro_estudiantes' in col or 'TOTAL' in col or 'nro_horas' in col: # Asumiendo que estos son numéricos
-                data.sort(key=lambda t: float(t[0]) if isinstance(t[0], str) and t[0].replace('.', '', 1).isdigit() else t[0])
-            else:
-                data.sort(key=lambda t: t[0])
-        except ValueError:
-            data.sort(key=lambda t: t[0])
+        # Obtener el DataFrame actualmente mostrado (filtrado o completo)
+        # Para ordenar, necesitamos aplicar los filtros actuales y luego ordenar ese subconjunto
+        df_to_sort = self.full_schedule_df.copy()
+        for filter_col, entry in self.filter_entries.items():
+            filter_val = entry.get().strip()
+            if filter_val:
+                if filter_col in df_to_sort.columns:
+                    if filter_col == 'nroidenti':
+                        df_to_sort['nroidenti_temp'] = df_to_sort['nroidenti'].apply(limpiar_numero_documento)
+                        df_to_sort = df_to_sort[df_to_sort['nroidenti_temp'].str.contains(limpiar_numero_documento(filter_val), case=False, na=False)]
+                        df_to_sort = df_to_sort.drop(columns=['nroidenti_temp'])
+                    else:
+                        df_to_sort = df_to_sort[df_to_sort[filter_col].astype(str).str.contains(limpiar_texto_excel(filter_val), case=False, na=False)]
 
-        # Invertir el orden si ya estaba ordenado en esa dirección
-        if hasattr(self, '_sort_direction') and self._sort_column == col and self._sort_direction == "asc":
-            data.reverse()
-            self._sort_direction = "desc"
+        if df_to_sort.empty:
+            return
+
+        # Determinar la dirección de ordenación
+        if self._sort_column == col:
+            self._sort_direction = "desc" if self._sort_direction == "asc" else "asc"
         else:
             self._sort_direction = "asc"
-        self._sort_column = col
+            self._sort_column = col
 
-        for index, (val, item) in enumerate(data):
-            self.tree.move(item, '', index)
+        # Función clave para la ordenación robusta
+        def sort_key_robust(row_val):
+            try:
+                # Intentar convertir a float para números
+                # Si es un número de documento, limpiarlo antes de intentar convertir a float
+                if col == "nroidenti":
+                    cleaned_value = limpiar_numero_documento(row_val)
+                    return (0, float(cleaned_value))
+                # Para otras columnas numéricas, intentar directamente
+                return (0, float(row_val)) # 0 para que los números se ordenen antes que las cadenas
+            except (ValueError, TypeError):
+                # Si no es un número, tratar como cadena
+                return (1, str(row_val).lower()) # 1 para que las cadenas se ordenen después de los números
+
+        # Sort the DataFrame directly
+        df_to_sort['sort_key'] = df_to_sort[col].apply(sort_key_robust)
+        df_to_sort = df_to_sort.sort_values(by='sort_key', ascending=(self._sort_direction == "asc")).drop(columns='sort_key')
+        
+        # Actualizar la tabla con el DataFrame ordenado y filtrado
+        self.actualizar_tabla(df_to_sort)
+
+        # Actualizar el encabezado de la columna para mostrar la dirección de ordenación
+        for c in self.tree["columns"]:
+            text = self.tree.heading(c, "text")
+            # Remove existing arrows
+            text = text.replace(" ↑", "").replace(" ↓", "")
+            if c == col:
+                arrow = " ↑" if self._sort_direction == "asc" else " ↓"
+                self.tree.heading(c, text=f"{text}{arrow}")
+            else:
+                self.tree.heading(c, text=text)
 

@@ -59,6 +59,10 @@ class ScheduleModel:
                     df['hora_fin'] = pd.to_datetime(df['hora_fin_temp'], format='%H:%M', errors='coerce').dt.time
                     df = df.drop(columns=['hora_ini_temp', 'hora_fin_temp']) # Eliminar columnas temporales
                 
+                # Reindexar para asegurar todas las columnas esperadas
+                expected_cols = self._crear_df_programacion_vacio().columns.tolist()
+                df = df.reindex(columns=expected_cols)
+                
                 return df
             except Exception as e:
                 print(f"Error al cargar la programación limpia existente: {e}")
@@ -73,7 +77,7 @@ class ScheduleModel:
     def _crear_df_programacion_vacio(self):
         """Crea un DataFrame vacío con las columnas esperadas para la programación."""
         columns = [
-            'semestre', 'materia', 'PROGRAMA', 'MATERIA', 'inp', 'grupo', 'nivel_grupo',
+            'semestre', 'codigo_materia', 'PROGRAMA', 'materia', 'inp', 'grupo', 'nivel_grupo',
             'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat',
             'nro_estudiantes', 'TOTAL', 'nroidenti', 'profesor', 'dia', 'horario', 'aula', 'OBSERVACION',
             'hora_ini', 'hora_fin' # Columnas añadidas internamente
@@ -107,9 +111,18 @@ class ScheduleModel:
             return pd.DataFrame()
         
         if df.empty:
-            return df
+            # Si el DataFrame está vacío, reindexar a las columnas esperadas y devolver
+            return df.reindex(columns=self._crear_df_programacion_vacio().columns.tolist())
         
         try:
+            # Renombrar 'materia' a 'codigo_materia' si existe y 'MATERIA' también existe
+            if 'materia' in df.columns and 'MATERIA' in df.columns:
+                df.rename(columns={'materia': 'codigo_materia'}, inplace=True)
+            # Si solo existe 'materia' y no 'MATERIA', asumimos que 'materia' es el código
+            elif 'materia' in df.columns and 'MATERIA' not in df.columns:
+                df.rename(columns={'materia': 'codigo_materia'}, inplace=True)
+                df['materia'] = '' # Crear una columna 'materia' vacía si no hay nombre descriptivo
+
             # Convertir 'nroidenti' a string y limpiar inmediatamente
             if 'nroidenti' in df.columns:
                 df['nroidenti'] = df['nroidenti'].astype(str).apply(limpiar_numero_documento)
@@ -130,12 +143,10 @@ class ScheduleModel:
             else:
                 df['dia'] = df['dia'].str.upper().str.strip()
             
-            # Limpiar nombres de materias
+            # Limpiar nombres de materias (descriptivo)
             if 'MATERIA' in df.columns:
                 df['materia'] = df['MATERIA'].fillna('').astype(str).apply(limpiar_texto_excel)
-            elif 'materia' in df.columns: # Si existe 'materia' pero no 'MATERIA'
-                df['materia'] = df['materia'].fillna('').astype(str).apply(limpiar_texto_excel)
-            else: # Si no existe 'MATERIA' ni 'materia'
+            elif 'materia' not in df.columns: # Si no existe 'MATERIA' ni la nueva 'materia'
                 df['materia'] = ''
 
 
@@ -168,6 +179,7 @@ class ScheduleModel:
                 df = df.drop(columns=['hora_ini_temp', 'hora_fin_temp']) # Eliminar columnas temporales
             
             # Agrupar por clase con misma información para unificar franjas horarias
+            # Asegurarse de usar 'materia' (la descriptiva) para la agrupación si es lo deseado
             columnas_agrupacion = ['nroidenti', 'profesor', 'materia', 'aula', 'dia']
             
             # Verificar que todas las columnas existan antes de agrupar
@@ -185,8 +197,8 @@ class ScheduleModel:
                     agg_dict['hora_fin'] = 'max'
                 
                 # Agregar columnas opcionales solo si existen
-                # AÑADIDO 'inp' aquí para asegurar que se retenga
-                for col in ['nro_estudiantes', 'grupo', 'nivel_grupo', 'semestre', 'PROGRAMA', 'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat', 'TOTAL', 'OBSERVACION', 'inp']:
+                # Asegurarse de incluir 'codigo_materia' y 'inp' y todas las demás mencionadas
+                for col in ['nro_estudiantes', 'grupo', 'nivel_grupo', 'semestre', 'PROGRAMA', 'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat', 'TOTAL', 'OBSERVACION', 'inp', 'codigo_materia']:
                     if col in df.columns:
                         agg_dict[col] = 'first'
                 
@@ -214,16 +226,25 @@ class ScheduleModel:
                         agrupado['horario'] = agrupado.apply(format_horario_for_display, axis=1)
                         agrupado = agrupado.drop(columns=['hora_ini_str', 'hora_fin_str']) # Limpiar columnas temporales
                     
+                    # Reindexar el DataFrame agrupado para asegurar todas las columnas esperadas
+                    expected_cols = self._crear_df_programacion_vacio().columns.tolist()
+                    agrupado = agrupado.reindex(columns=expected_cols)
+                    
                     return agrupado
                 else:
+                    # Si no hay nada que agregar, pero sí hay un DataFrame, reindexarlo
+                    df = df.reindex(columns=self._crear_df_programacion_vacio().columns.tolist())
                     return df
             else:
                 # Si no podemos agrupar por las columnas clave, devolver el DataFrame limpio básico
+                # y reindexarlo para asegurar todas las columnas esperadas
+                df = df.reindex(columns=self._crear_df_programacion_vacio().columns.tolist())
                 return df
                 
         except Exception as e:
             messagebox.showerror("Error de Procesamiento", f"Error al procesar programación: {e}")
-            return df  # Devolver datos básicos si falla el procesamiento avanzado
+            # En caso de error, devolver un DataFrame vacío pero con todas las columnas esperadas
+            return self._crear_df_programacion_vacio()
 
     def cargar_y_limpiar_programacion(self, file_path):
         """
