@@ -23,6 +23,7 @@ class ScheduleView(BaseView):
         self.items_per_page = self.items_per_page_options[1]
         self.total_pages = 1
 
+
         self.columns = [
             'semestre', 'codigo_materia', 'PROGRAMA', 'materia', 'inp', 'grupo', 'nivel_grupo',
             'semanas', 'nro_horas', 'fecha_inicio', 'fecha_fin', 'nro_estudiantes_premat',
@@ -70,6 +71,7 @@ class ScheduleView(BaseView):
         self.tree = ttk.Treeview(table_frame, columns=self.columns, show="headings")
         self.tree.pack(side="left", fill="both", expand=True)
 
+
         for col in self.columns:
             self.tree.heading(col, text=self.column_display_names.get(col, col), command=lambda c=col: self.ordenar_columna(c))
             self.tree.column(col, width=100)
@@ -100,6 +102,8 @@ class ScheduleView(BaseView):
 
         self.next_page_button = ttk.Button(pagination_frame, text="Siguiente >", command=self.go_to_next_page)
         self.next_page_button.pack(side=tk.LEFT, padx=10)
+
+        self.tree.bind('<Double-1>', self.abrir_modal_edicion)
 
     def mostrar_selector_columnas(self):
         ventana = tk.Toplevel(self)
@@ -225,3 +229,60 @@ class ScheduleView(BaseView):
         df = df.sort_values('sort_key', ascending=(self._sort_direction == "asc")).drop(columns='sort_key')
         self.full_schedule_df_filtered = df
         self.actualizar_tabla(self.full_schedule_df_filtered)
+        
+    def abrir_modal_edicion(self, event):
+        item_id = self.tree.identify_row(event.y)
+        if not item_id:
+            return
+
+        valores_fila = self.tree.item(item_id, "values")
+        if not valores_fila:
+            return
+
+        modal = tk.Toplevel(self)
+        modal.title("Editar programación")
+        modal.grab_set()
+        modal.geometry("600x600")
+        modal.transient(self)
+
+        entries = {}
+        visual_idx = 0
+
+        for col in self.columns:
+            if not self.column_visibility.get(col, True):
+                continue
+
+            ttk.Label(modal, text=self.column_display_names[col]).grid(row=visual_idx, column=0, sticky="w", padx=10, pady=5)
+
+            entry = ttk.Entry(modal, width=40)
+            if visual_idx < len(valores_fila):
+                entry.insert(0, valores_fila[visual_idx])
+            entry.grid(row=visual_idx, column=1, sticky="w", padx=10, pady=5)
+
+            entries[col] = entry
+            visual_idx += 1
+
+        def guardar_edicion():
+            nuevos_valores = []
+            for col in self.columns:
+                if self.column_visibility.get(col, True):
+                    valor = entries[col].get()
+                    nuevos_valores.append(valor)
+
+            self.tree.item(item_id, values=nuevos_valores)
+
+            index_df = (self.current_page - 1) * self.items_per_page + self.tree.index(item_id)
+            visible_cols = [c for c in self.columns if self.column_visibility.get(c, True)]
+            for i, col in enumerate(visible_cols):
+                val = nuevos_valores[i]
+                if 'fecha' in col:
+                    try:
+                        val = datetime.strptime(val, "%Y-%m-%d")
+                    except:
+                        pass
+                self.full_schedule_df_filtered.at[self.full_schedule_df_filtered.index[index_df], col] = val
+                self.full_schedule_df.at[self.full_schedule_df_filtered.index[index_df], col] = val
+
+            modal.destroy()
+
+        ttk.Button(modal, text="Guardar", command=guardar_edicion).grid(row=visual_idx+1, column=0, columnspan=2, pady=10)
